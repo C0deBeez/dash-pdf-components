@@ -1,6 +1,6 @@
 {
   "name": "dash-pdf-components",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "PDF generation and viewing components for Plotly Dash",
   "main": "dash_pdf_components/dash_pdf_components.js",
   "unpkg": "dash_pdf_components/dash_pdf_components.js",
@@ -13,7 +13,7 @@
     "access": "public"
   },
   "scripts": {
-    "build:backends": "python scripts/clean_generated.py && python scripts/generate_typing.py && dash-generate-components ./src/components dash_pdf_components -p package-info.json --ignore \"(\\\\.test\\\\.|fragments/)\"",
+    "build:backends": "python scripts/clean_generated.py && python scripts/generate_typing.py && dash-generate-components ./src/components dash_pdf_components -p package-info.json --ignore \"(\\\\.test\\\\.|fragments/)\" && node scripts/fix_proptypes.cjs",
     "build:js::dev": "webpack --config webpack.config.js --env development",
     "build:js": "rimraf \"dash_pdf_components/async-*.js\" \"dash_pdf_components/*.js.map\" dash_pdf_components/pdfjs && webpack --config webpack.config.js",
     "build": "pnpm run build:backends && pnpm run build:js",

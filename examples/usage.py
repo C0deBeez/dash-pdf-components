@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from dash import Dash, Input, Output, dcc, html
+from dash import Dash, Input, Output, State, dcc, html
 
 import dash_pdf_components as dpr
 from examples.gallery import MANIFEST, get_example
@@ -30,33 +30,33 @@ app.layout = html.Div(
             fileName="page-wrap.pdf",
             style={"height": "75vh"},
             fit="page",
-            showDownload=False,
             **initial_config,
         ),
         html.Div(id="status"),
         html.Details(
             [
                 html.Summary("Additional output examples"),
-                html.P("Generate a separate download or send the PDF to Python as Base64."),
-                html.Button("Generate download", id="generate-download", n_clicks=0),
+                html.P("Generate without a preview, then download through a browser link or Dash."),
+                html.Button("Generate PDF", id="generate-download", n_clicks=0),
                 dpr.PDF(
-                    mode="download",
+                    preview=False,
                     id="download",
                     document=initial_document,
-                    downloadLabel="Download PDF",
-                    fileName="page-wrap.pdf",
                     autoGenerate=False,
                     **initial_config,
                 ),
+                html.A("Download PDF", id="download-link", download="page-wrap.pdf"),
                 html.Button("Generate Base64", id="generate-base64", n_clicks=0),
                 dpr.PDF(
-                    mode="blob",
+                    preview=False,
                     id="provider",
                     document=initial_document,
                     autoGenerate=False,
                     returnBase64=True,
                     **initial_config,
                 ),
+                html.Button("Download with Dash", id="download-base64", n_clicks=0, disabled=True),
+                dcc.Download(id="base64-download"),
                 html.Div(id="base64-status"),
             ],
             style={"marginTop": 20},
@@ -73,7 +73,7 @@ app.layout = html.Div(
         for output in ["preview", "download", "provider"]
         for field in ["fonts", "emojiSource", "hyphenationCallback"]
     ]
-    + [Output(output, "fileName") for output in ["preview", "download", "provider"]]
+    + [Output("preview", "fileName"), Output("download-link", "download")]
     + [Output("example-details", "children")],
     Input("example", "value"),
 )
@@ -86,7 +86,7 @@ def update_document(identifier):
     return (
         [document, document, document]
         + [config[field] for _ in range(3) for field in ["fonts", "emojiSource", "hyphenationCallback"]]
-        + [identifier + ".pdf"] * 3
+        + [identifier + ".pdf"] * 2
         + [details]
     )
 
@@ -99,6 +99,30 @@ def generate_download(clicks):
 @app.callback(Output("provider", "n_generate"), Input("generate-base64", "n_clicks"), prevent_initial_call=True)
 def generate_base64(clicks):
     return clicks
+
+
+app.clientside_callback(
+    "function(url) { return url || null; }",
+    Output("download-link", "href"),
+    Input("download", "url"),
+)
+
+app.clientside_callback(
+    "function(data) { return !data; }",
+    Output("download-base64", "disabled"),
+    Input("provider", "data"),
+)
+
+app.clientside_callback(
+    """function(clicks, content) {
+        if (!clicks || !content) return window.dash_clientside.no_update;
+        return {content, filename: 'report.pdf', type: 'application/pdf', base64: true};
+    }""",
+    Output("base64-download", "data"),
+    Input("download-base64", "n_clicks"),
+    State("provider", "data"),
+    prevent_initial_call=True,
+)
 
 
 @app.callback(Output("base64-status", "children"), Input("provider", "data"))

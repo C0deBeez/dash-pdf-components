@@ -18,6 +18,19 @@ const serializeError = (stage: string, value: unknown) => {
   return { stage, name: error.name, message: error.message };
 };
 
+const clearedViewerState = {
+  numPages: null,
+  documentData: null,
+  pageData: null,
+  renderData: null,
+  loadProgress: null,
+  sourceLoaded: false,
+  passwordData: null,
+  itemClickData: null,
+  annotationsData: null,
+  textData: null,
+};
+
 class LazyBoundary extends React.Component<
   {
     onError: (error: unknown) => void;
@@ -45,12 +58,10 @@ class LazyBoundary extends React.Component<
 const PDFController = (props: PDFProps) => {
   const {
     document: _document,
-    mode = "viewer",
+    preview = true,
     previewMode = "pdfjs",
     file = null,
     fileName = "document.pdf",
-    showDownload = false,
-    downloadLabel = "Download PDF",
     showToolbar = true,
     frameId,
     autoGenerate = true,
@@ -69,7 +80,6 @@ const PDFController = (props: PDFProps) => {
     fontFamilies: _families,
     fontInfo: _fontInfo,
     n_render = 0,
-    n_clicks = 0,
     setProps,
     ...viewerProps
   } = props;
@@ -84,9 +94,7 @@ const PDFController = (props: PDFProps) => {
     return JSON.stringify(raw?.document ?? null);
   });
   const hasDocument = documentJSON !== "null";
-  const invalid =
-    (hasDocument && file !== null) ||
-    (mode === "blob" && !hasDocument && file !== null);
+  const invalid = hasDocument && file !== null;
   const configJSON = JSON.stringify({
     fonts,
     fontAction,
@@ -108,9 +116,7 @@ const PDFController = (props: PDFProps) => {
   const latest = useRef(props);
   latest.current = props;
   const renderCount = useRef(n_render);
-  const clickCount = useRef(n_clicks);
   renderCount.current = Math.max(renderCount.current, n_render);
-  clickCount.current = Math.max(clickCount.current, n_clicks);
   const active =
     result?.key === inputKey && hasDocument && !invalid ? result : null;
   const source = hasDocument ? (active?.blob ?? null) : file;
@@ -118,6 +124,7 @@ const PDFController = (props: PDFProps) => {
   const nativeFileKey = JSON.stringify(file);
   useEffect(() => {
     if (
+      !preview ||
       previewMode !== "native" ||
       hasDocument ||
       !file ||
@@ -134,35 +141,25 @@ const PDFController = (props: PDFProps) => {
     return () => {
       setTimeout(() => URL.revokeObjectURL(url), 0);
     };
-  }, [previewMode, hasDocument, nativeFileKey]);
+  }, [preview, previewMode, hasDocument, nativeFileKey]);
   const callbackLoading = getLoadingState(props.loading_state);
 
   useEffect(() => {
-    latest.current.setProps?.({
-      numPages: null,
-      documentData: null,
-      pageData: null,
-      renderData: null,
-      loadProgress: null,
-      sourceLoaded: false,
-      passwordData: null,
-      itemClickData: null,
-      annotationsData: null,
-      textData: null,
-    });
-  }, [inputKey, mode, previewMode]);
+    latest.current.setProps?.(clearedViewerState);
+  }, [inputKey, preview, previewMode]);
 
   useEffect(() => {
     setGenerationError(null);
     if (invalid) {
       const error = serializeError(
         "input",
-        "file and document are mutually exclusive; blob mode requires document.",
+        "file and document are mutually exclusive.",
       );
       setGenerationError(error);
       setGenerating(false);
       setResult(null);
       latest.current.setProps?.({
+        ...clearedViewerState,
         errorData: error,
         generating: false,
         url: null,
@@ -268,65 +265,6 @@ const PDFController = (props: PDFProps) => {
     [setProps, generationError],
   );
 
-  const download = async (event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    if (!source) return;
-    try {
-      let blob: Blob;
-      if (source instanceof Blob) blob = source;
-      else {
-        const url =
-          typeof source === "string"
-            ? source
-            : "url" in source
-              ? source.url
-              : null;
-        if (url) {
-          const response = await fetch(url, {
-            headers: props.options?.httpHeaders ?? undefined,
-            credentials: props.options?.withCredentials
-              ? "include"
-              : "same-origin",
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          blob = await response.blob();
-        } else
-          blob = new Blob(
-            [new Uint8Array((source as { data: number[] }).data)],
-            { type: "application/pdf" },
-          );
-      }
-      const url = URL.createObjectURL(blob);
-      const anchor = window.document.createElement("a");
-      anchor.href = url;
-      anchor.download = latest.current.fileName || "document.pdf";
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      latest.current.setProps?.({ n_clicks: ++clickCount.current });
-    } catch (value) {
-      latest.current.setProps?.({
-        errorData: serializeError("download", value),
-      });
-    }
-  };
-  const link = (
-    <a
-      href={
-        active?.url ||
-        (typeof file === "string"
-          ? file
-          : file && "url" in file
-            ? file.url
-            : null) ||
-        undefined
-      }
-      download={fileName}
-      aria-disabled={!source}
-      onClick={download}
-    >
-      {downloadLabel}
-    </a>
-  );
   const {
     children,
     id,
@@ -374,7 +312,7 @@ const PDFController = (props: PDFProps) => {
         <div role="alert">{props.error ?? generationError.message}</div>
       )}
       {!invalid &&
-        mode === "viewer" &&
+        preview &&
         !generationError &&
         (previewMode === "native"
           ? (nativeUrl ||
@@ -420,14 +358,7 @@ const PDFController = (props: PDFProps) => {
                 </React.Suspense>
               </LazyBoundary>
             ))}
-      {!source &&
-        !generating &&
-        !generationError &&
-        mode === "viewer" &&
-        props.noData}
-      {!invalid &&
-        (mode === "download" || (mode === "viewer" && showDownload)) &&
-        link}
+      {!source && !generating && !generationError && preview && props.noData}
     </div>
   );
 };

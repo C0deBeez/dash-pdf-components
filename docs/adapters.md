@@ -1,10 +1,10 @@
 # Dash PDF adapters
 
-`PDF` is the only output component. Document nodes describe generated PDF content; they never render HTML. `file` and `document` are mutually exclusive. `mode` chooses preview, download link, or generation without a preview.
+`PDF` is the only output component. Document nodes describe generated PDF content; they never render HTML. `file` and `document` are mutually exclusive. `preview=False` skips the viewer; browser links and Dash's `dcc.Download` handle downloads.
 
 Generation uses a separate lazy renderer module. PDF.js display uses a separate lazy viewer module. An internal Blob links the two; public `url` and opt-in `data` are JSON-safe output properties. Reader controls never trigger generation. `n_render` counts successful current generation jobs only.
 
-`errorData` reports stage/name/message. `error` is custom UI. `generating` is generator activity, separate from Dash callback loading. The old PDFViewer/PDFDownloadLink/BlobProvider names in the upstream API audit describe upstream adapters; they are now exposed through PDF modes.
+`errorData` reports stage/name/message. `error` is custom UI. `generating` is generator activity, separate from Dash callback loading. The old PDFViewer/PDFDownloadLink/BlobProvider names in the upstream API audit describe upstream adapters; the public PDF uses `preview` for display and Dash controls for downloads.
 
 PDF document styles are distinct from PDF container CSS. `width` and `height` size reader pages; `style` sizes the HTML container. `children` remains page overlay content. Generated document trees always go in `document`.
 

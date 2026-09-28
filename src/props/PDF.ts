@@ -20,16 +20,12 @@ import type {
 export interface PDFProps extends PDFDashBaseProps {
   /** Document description to generate. Mutually exclusive with file. */
   document?: React.ReactNode;
-  /** Output presentation. viewer previews, download renders a link, blob only generates. Defaults to viewer. */
-  mode?: "viewer" | "download" | "blob";
+  /** Display the generated or supplied PDF. Set false to generate without loading the viewer. Defaults to true. */
+  preview?: boolean;
   /** Preview engine. pdfjs is the default; native uses the browser iframe and lacks page callbacks. */
   previewMode?: "pdfjs" | "native";
-  /** Download filename. Defaults to document.pdf. */
+  /** Title of the native preview frame. Defaults to document.pdf. */
   fileName?: string;
-  /** Include a basic download link in viewer mode. Defaults to false. */
-  showDownload?: boolean;
-  /** Download link text. Defaults to Download PDF. */
-  downloadLabel?: string;
   /** Browser-native toolbar hint. Custom reader controls belong to AIO. */
   showToolbar?: boolean;
   /** Stable native preview iframe ID. */
@@ -40,8 +36,6 @@ export interface PDFProps extends PDFDashBaseProps {
   n_generate?: number;
   /** Read-only latest successful generation count. Page drawing does not increment it. */
   n_render?: number;
-  /** Read-only download click count. */
-  n_clicks?: number;
   /** Read-only generation activity, separate from Dash callback loading. */
   generating?: boolean;
   /** Read-only generated Blob URL. Valid only in this browser until replacement or unmount. */

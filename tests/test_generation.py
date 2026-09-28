@@ -13,18 +13,18 @@ import dash_pdf_components as dpc
 
 def test_generation_properties_and_descriptor_tree():
     document = dpc.Document(dpc.Page(dpc.Text("Hello"), size="A4"))
-    for mode in ("viewer", "download", "blob"):
-        output = dpc.PDF(document=document, mode=mode, returnBase64=True)
+    for preview in (True, False):
+        output = dpc.PDF(document=document, preview=preview, returnBase64=True)
         assert output.to_plotly_json()["props"]["document"] is document
-    assert dpc.PDF(mode="blob")._type == "PDF"
+    assert dpc.PDF(preview=False)._type == "PDF"
     assert {"async-pdf-generator.js", "async-pdf-viewer.js"} == {
         entry["relative_package_path"] for entry in vars(dpc.PDF)["_js_dist"] if entry.get("async") == "lazy"
     }
 
 
 @pytest.mark.browser
-@pytest.mark.parametrize("mode", ["blob", "viewer", "download"])
-def test_generated_pdf_and_lazy_modules(browser, mode):
+@pytest.mark.parametrize("preview", [False, True])
+def test_generated_pdf_and_lazy_modules(browser, preview):
     app = Dash(__name__, requests_pathname_prefix="/pdf/", routes_pathname_prefix="/pdf/")
     app.enable_dev_tools(dev_tools_ui=True, dev_tools_props_check=True, dev_tools_hot_reload=False)
     app.layout = html.Div(
@@ -32,7 +32,7 @@ def test_generated_pdf_and_lazy_modules(browser, mode):
             dpc.PDF(
                 id="pdf",
                 document=dpc.Document(dpc.Page(dpc.Text("Hello from unified PDF"))),
-                mode=mode,
+                preview=preview,
                 returnBase64=True,
                 fit="width",
                 style={"height": 300},
@@ -60,14 +60,14 @@ def test_generated_pdf_and_lazy_modules(browser, mode):
         reader = PdfReader(io.BytesIO(base64.b64decode(state["data"])))
         assert "Hello from unified PDF" in reader.pages[0].extract_text()
         end = time.monotonic() + 20
-        while mode == "viewer" and time.monotonic() < end:
+        while preview and time.monotonic() < end:
             if script("return !!document.querySelector('#pdf canvas')"):
                 break
             time.sleep(0.1)
         requests = script("return performance.getEntriesByType('resource').map(e=>e.name)")
         assert any("async-pdf-generator.js" in url for url in requests), requests
-        assert any("async-pdf-viewer.js" in url for url in requests) == (mode == "viewer"), requests
-        if mode != "viewer":
+        assert any("async-pdf-viewer.js" in url for url in requests) == preview, requests
+        if not preview:
             assert not any("pdf.worker" in url for url in requests), requests
         previous = state["n_render"]
         script("window.dash_clientside.set_props('pdf', {scale:1.5, rotate:90, returnBase64:false})")
@@ -93,7 +93,7 @@ def test_nested_updates_manual_generation_and_url_retirement(browser):
     app.layout = dpc.PDF(
         id="pdf",
         document=dpc.Document(dpc.Page(dpc.Text("Original", id="pdf-text"))),
-        mode="blob",
+        preview=False,
         returnBase64=True,
     )
     server = make_server("127.0.0.1", 0, app.server, threaded=True)
@@ -131,7 +131,7 @@ def test_nested_updates_manual_generation_and_url_retirement(browser):
         generated = wait_state(lambda value: bool(value.get("data")) and value["n_render"] > initial["n_render"])
         assert "Manual replacement" in PdfReader(io.BytesIO(base64.b64decode(generated["data"]))).pages[0].extract_text()
         assert generated["n_render"] == initial["n_render"] + 1
-        script("window.dash_clientside.set_props('pdf', {mode:'download'})")
+        script("window.dash_clientside.set_props('pdf', {preview:true})")
         time.sleep(0.2)
         assert script("return window.dash_component_api.getLayout('pdf').props.url") == generated["url"]
         assert script("return window.dash_component_api.getLayout('pdf').props.n_render") == generated["n_render"]

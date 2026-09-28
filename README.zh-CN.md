@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-通过一个 `PDF` 输出组件在 Plotly Dash 中生成、显示和下载 PDF。`Document`、`Page`、`Text`、图像、SVG 和表单组件用于描述要生成的文档，不会渲染为 HTML。
+通过一个 `PDF` 输出组件在 Plotly Dash 中生成和显示 PDF。生成文件可通过浏览器链接或 Dash 的 `dcc.Download` 下载。`Document`、`Page`、`Text`、图像、SVG 和表单组件用于描述要生成的文档，不会渲染为 HTML。
 
 ```bash
 uv add dash-pdf-components
@@ -57,8 +57,6 @@ app.layout = dpc.PDF(
     ),
     fit="page",
     style={"height": "75vh"},
-    showDownload=True,
-    fileName="report.pdf",
 )
 
 if __name__ == "__main__":
@@ -69,21 +67,19 @@ if __name__ == "__main__":
 
 `PDF.children` 是在已显示页面上重复呈现的附加内容。生成内容应始终通过 `document` 提供。文档节点样式遵循渲染器的布局属性和单位；`PDF.style` 则是 HTML 容器的 CSS。
 
-## 输出模式与回调
+## 下载与生成回调
 
 | 属性 | 含义 | 默认值 |
 | --- | --- | --- |
-| `mode` | `viewer` 显示 PDF，`download` 渲染下载链接，`blob` 只生成而不预览 | `viewer` |
+| `preview` | 是否显示 PDF；关闭时生成文档但不加载阅读器 | true |
 | `document` | 用于生成 PDF 的单个 Document 描述；与 `file` 互斥 | None |
-| `fileName` / `downloadLabel` | 文件名和基础下载链接文字 | document.pdf / Download PDF |
-| `showDownload` | 在预览中包含下载链接 | false |
+| `fileName` | 原生预览 iframe 的标题 | document.pdf |
 | `autoGenerate` | 文档或字体配置变化时自动生成 | true |
 | `n_generate` | 修改计数器以手动请求生成 | 0 |
 | `generating` | 只读的生成器活动状态，与 Dash 回调加载状态分离 | false |
 | `url` / `size` | 只读的浏览器 Blob URL 和字节数 | None / 0 |
 | `returnBase64` / `data` | 选择启用 Base64 导出及其只读结果 | false / None |
 | `n_render` | 只读的成功生成次数；绘制页面不会增加该值 | 0 |
-| `n_clicks` | 只读的成功下载点击次数 | 0 |
 | `errorData` | 只读的错误阶段、名称和消息 | None |
 | `numPages` / `documentData` | 只读的 PDF.js 已加载页数和文件指纹 | None |
 | `pageData` / `renderData` | 只读的最近加载或渲染页面尺寸 | None |
@@ -93,24 +89,39 @@ if __name__ == "__main__":
 | `annotationsData` / `textData` | 只读的最近图层计数 | None |
 | `previewMode` | `pdfjs` 或浏览器原生 `native` iframe | pdfjs |
 
-提供输入时，`mode="blob"` 需要同时提供文档。`mode="download"` 同时支持现有文件和生成的文档。原生预览不会暴露 PDF.js 页面或图层事件；`showToolbar` 是给浏览器的提示，`frameId` 用于命名 iframe。只有 PDF.js 加载文档后才会得到 `numPages`；无预览生成时，不会仅为获取页数而加载 PDF.js。
+原生预览不会暴露 PDF.js 页面或图层事件；`showToolbar` 是给浏览器的提示，`frameId` 用于命名 iframe。只有 PDF.js 加载文档后才会得到 `numPages`；无预览生成时，不会仅为获取页数而加载 PDF.js。`fileName` 不会设置独立 Dash 下载控件的文件名。
 
 ```python
-from dash import Input, Output, html
+from dash import Dash, Input, Output, html
+import dash_pdf_components as dpc
 
+app = Dash(__name__)
 app.layout = html.Div([
     html.Button("Generate", id="generate"),
-    dpc.PDF(id="output", document=document, mode="download",
-            autoGenerate=False, fileName="report.pdf"),
+    dpc.PDF(
+        id="output",
+        document=dpc.Document(dpc.Page(dpc.Text("Report"))),
+        preview=False,
+        autoGenerate=False,
+    ),
+    html.A("下载 PDF", id="download-link", download="report.pdf"),
 ])
 
 @app.callback(Output("output", "n_generate"), Input("generate", "n_clicks"),
               prevent_initial_call=True)
 def generate(clicks):
     return clicks
+
+app.clientside_callback(
+    "function(url) { return url || null; }",
+    Output("download-link", "href"), Input("output", "url"),
+)
+
+if __name__ == "__main__":
+    app.run(debug=True)
 ```
 
-如需在 Python 中访问 PDF，请启用 `returnBase64=True`，并使用 `base64.b64decode` 解码 `data`。启用 Base64 导出会复用当前生成的 Blob，不会重新布局文档。Blob URL 仅属于当前浏览器；结果被替换或组件卸载时会释放，Python 无法获取它。用户提供的 URL 不由本组件管理或释放。
+使用 `dcc.Download` 时，启用 `returnBase64=True`，并在按钮回调中返回 `{"content": data, "filename": "report.pdf", "type": "application/pdf", "base64": True}`。PDF 字节会经过 Dash；大文件更适合上面的浏览器链接。如需在 Python 中访问 PDF，可使用 `base64.b64decode` 解码 `data`。启用 Base64 导出会复用当前生成的 Blob，不会重新布局文档。Blob URL 仅属于当前浏览器；结果被替换或组件卸载时会释放，Python 无法获取它。用户提供的 URL 不由本组件管理或释放。
 
 `error` 仍表示自定义错误界面，而不是错误输出字符串。`noData` 用于提供空输入界面。Dash 回调加载使用 Dash 上下文；`generating` 与 PDF 资源加载是彼此独立的活动。
 
@@ -129,7 +140,7 @@ def generate(clicks):
 主入口只包含公开包装组件和控制器。生成模块和 PDF.js 显示模块分别位于独立的 `async-pdf-generator.js` 和 `async-pdf-viewer.js` 分块中，并向 Dash 注册。
 
 - 显示 `file` 时加载显示模块和 Worker，不加载渲染器。
-- 在 blob/download 模式下生成时加载渲染器，不加载 PDF.js 或其 Worker。
+- 设置 `preview=False` 生成时加载渲染器，不加载 PDF.js 或其 Worker。
 - 生成并显示时加载两个模块。
 - 原生预览不会加载 PDF.js 显示模块。
 

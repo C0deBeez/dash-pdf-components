@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Generate, display, and download PDFs in Plotly Dash through one `PDF` output component. `Document`, `Page`, `Text`, image, SVG, and form components describe documents to generate; they do not render HTML.
+Generate and display PDFs in Plotly Dash through one `PDF` output component. Use a browser link or Dash's `dcc.Download` to download generated files. `Document`, `Page`, `Text`, image, SVG, and form components describe documents to generate; they do not render HTML.
 
 ```bash
 uv add dash-pdf-components
@@ -57,8 +57,6 @@ app.layout = dpc.PDF(
     ),
     fit="page",
     style={"height": "75vh"},
-    showDownload=True,
-    fileName="report.pdf",
 )
 
 if __name__ == "__main__":
@@ -69,21 +67,19 @@ if __name__ == "__main__":
 
 `PDF.children` is additional content repeated over displayed pages. Always supply generated content through `document`. Document-node styles follow renderer layout properties and units; `PDF.style` is HTML container CSS.
 
-## Output modes and callbacks
+## Download and generation callbacks
 
 | Property | Meaning | Default |
 | --- | --- | --- |
-| `mode` | `viewer` displays, `download` renders a link, `blob` generates without preview | `viewer` |
+| `preview` | Display the PDF; false generates a document without loading the viewer | true |
 | `document` | One Document description to generate; mutually exclusive with file | None |
-| `fileName` / `downloadLabel` | Filename and basic download link label | document.pdf / Download PDF |
-| `showDownload` | Include a download link with a preview | false |
+| `fileName` | Title of the native preview frame | document.pdf |
 | `autoGenerate` | Generate on document or font configuration changes | true |
 | `n_generate` | Change the counter to request manual generation | 0 |
 | `generating` | Read-only generator activity, separate from Dash callback loading | false |
 | `url` / `size` | Read-only generated browser Blob URL and byte count | None / 0 |
 | `returnBase64` / `data` | Opt-in Base64 export and read-only result | false / None |
 | `n_render` | Read-only successful generation count; page drawing does not increment it | 0 |
-| `n_clicks` | Read-only successful download click count | 0 |
 | `errorData` | Read-only error stage, name, and message | None |
 | `numPages` / `documentData` | Read-only PDF.js-loaded page count and fingerprints | None |
 | `pageData` / `renderData` | Read-only latest loaded/rendered page dimensions | None |
@@ -93,24 +89,39 @@ if __name__ == "__main__":
 | `annotationsData` / `textData` | Read-only latest layer counts | None |
 | `previewMode` | `pdfjs` or `native` browser iframe | pdfjs |
 
-`mode="blob"` requires a document when an input is provided. `mode="download"` supports both existing files and generated documents. Native preview does not expose PDF.js page/layer events; `showToolbar` is a browser hint and `frameId` names its iframe. `numPages` is obtained only when PDF.js loads a document; generating without a preview does not load PDF.js just to obtain page counts.
+Native preview does not expose PDF.js page/layer events; `showToolbar` is a browser hint and `frameId` names its iframe. `numPages` is obtained only when PDF.js loads a document; generating without a preview does not load PDF.js just to obtain page counts. `fileName` does not set the filename of a separate Dash download control.
 
 ```python
-from dash import Input, Output, html
+from dash import Dash, Input, Output, html
+import dash_pdf_components as dpc
 
+app = Dash(__name__)
 app.layout = html.Div([
     html.Button("Generate", id="generate"),
-    dpc.PDF(id="output", document=document, mode="download",
-            autoGenerate=False, fileName="report.pdf"),
+    dpc.PDF(
+        id="output",
+        document=dpc.Document(dpc.Page(dpc.Text("Report"))),
+        preview=False,
+        autoGenerate=False,
+    ),
+    html.A("Download PDF", id="download-link", download="report.pdf"),
 ])
 
 @app.callback(Output("output", "n_generate"), Input("generate", "n_clicks"),
               prevent_initial_call=True)
 def generate(clicks):
     return clicks
+
+app.clientside_callback(
+    "function(url) { return url || null; }",
+    Output("download-link", "href"), Input("output", "url"),
+)
+
+if __name__ == "__main__":
+    app.run(debug=True)
 ```
 
-For Python access, enable `returnBase64=True` and decode `data` using `base64.b64decode`. Enabling Base64 export uses the current generated Blob and does not re-layout the document. Blob URLs belong to the current browser and are released on result replacement or component unmount; Python cannot fetch them. User-supplied URLs are not owned or released by this component.
+For `dcc.Download`, enable `returnBase64=True` and return `{"content": data, "filename": "report.pdf", "type": "application/pdf", "base64": True}` from a button callback. The bytes then travel through Dash; use the browser link above for large files. For Python access, decode `data` with `base64.b64decode`. Enabling Base64 export uses the current generated Blob and does not re-layout the document. Blob URLs belong to the current browser and are released on result replacement or component unmount; Python cannot fetch them. User-supplied URLs are not owned or released by this component.
 
 `error` remains custom error UI, not an error output string. `noData` supplies empty-input UI. Dash callback loading uses Dash context; `generating` and PDF resource loading are separate activities.
 
@@ -129,7 +140,7 @@ Font-dependent generation jobs are serialized and per-job settings restored. Sup
 The main entry contains only public wrappers and the controller. Generation and PDF.js display have independent `async-pdf-generator.js` and `async-pdf-viewer.js` chunks registered with Dash.
 
 - Displaying `file` loads the display module and Worker, without the renderer.
-- Generating in blob/download mode loads the renderer, without PDF.js or its Worker.
+- Generating with `preview=False` loads the renderer, without PDF.js or its Worker.
 - Generating and displaying loads both modules.
 - Native preview avoids the PDF.js display module.
 
